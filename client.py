@@ -4,6 +4,7 @@ import os
 import json
 import traceback, sys 
 import csv
+#import pandas as pd
 
 List_of_RFCs = 'C:\\Internet_Protocols\\List_of_RFCs'
 csv_receivedlist = 'C:\\Internet_Protocols\\Received_list\\csv_receivedlist.csv'
@@ -13,6 +14,9 @@ Port_RS = 23473
 Host_RS = '192.168.0.161'
 
 hostname = socket.gethostname()
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.connect(("8.8.8.8", 80))
+ip1 = (s.getsockname()[0])
 print(hostname)
 portnumber = 10000
 
@@ -41,20 +45,20 @@ def check_rfc(request):
             if rfcs not in peer_list:
                 rfcs = rfcs.strip()
                 r.append(rfcs)
-                print(r)
+                #print(r)
     return r
 
 def requesting_peerlist():
     rfc_request = input("Enter the rfc to be requested: ")
     rfc = check_rfc(rfc_request)
-    print(rfc)
+    #print(rfc)
     x = 'Active_peer'
     message = json.dumps({"msg" : x , "Hostname" : hostname , "Portnumber" : str(portnumber)})
     s.send(message.encode())
     received_message = s.recv(2048).decode()
     print(received_message)
     recv_message = received_message.split('\n')
-    print(type(recv_message), len(recv_message), recv_message)
+    #print(type(recv_message), len(recv_message), recv_message)
     if len(recv_message) == 1:
         print("No peers active")
         s.close()
@@ -77,6 +81,39 @@ def requesting_peerlist():
         if(len(res) != 0):
             print("No active peer left to check")
     s.close()
+    
+def checking_list(msg):
+    f = open(csv_receivedlist)
+    csv_f = csv.reader(f)
+    list1 = []
+    attendee_emails = []
+    for row in csv_f:
+
+        d = row[0].split(";")
+        attendee_emails.append(d)
+    #print('abc',attendee_emails)
+    #print('msg',msg)
+    for i in msg:
+        #b = i[0]
+        c = i[0].split(";")
+
+        if c in attendee_emails:
+            pass
+        else:
+            count = 0
+            for j in attendee_emails:
+                if c[0] == j[0] and c[1] == j[1] and c[2] == j[2]:
+                    #print("in loop")
+                    ind = attendee_emails.index(j)
+                    attendee_emails[ind] = c
+                    count +=1
+                    
+            if count == 0:
+                attendee_emails.append(c)
+                list1.append(c)
+   # print(list1)
+    return list1
+
 
 def requesting_rfcs(peer: peerserver, rfc):
     print(rfc)
@@ -93,18 +130,26 @@ def requesting_rfcs(peer: peerserver, rfc):
     #print(type(recv_message), len(recv_message), recv_message)
     new_msg = recv_message[2]
     #print(new_msg) 
-    res_msg = json.loads(new_msg)
-    for item in res_msg:
-        IPList = item[0].split(';')
+    r_msg = json.loads(new_msg)
+    print(r_msg)
+    res_msg = checking_list(r_msg)
+    print("-------------------------------------------")
+    print(res_msg)
+    print("-------------------------------------------")
+    for IPList in res_msg:
+        #print("Here")
+        #IPList = item[0].split(',')
+        #print(IPList)
         texttype = IPList[0].split('.')[0]
         ip_1 = IPList[1]
         port_1 = IPList[2]
-        reg_rfc_in_csv(texttype, ip_1, port_1)
+        flag = IPList[3]
+        reg_rfc_in_csv(texttype, ip_1, port_1, flag)
         
     if new_msg == '[]':
         res = 0
     else:
-        print("in else")
+        print("Im here")
         res = json.loads(new_msg)
         #print(res)
         for element in res:
@@ -112,19 +157,21 @@ def requesting_rfcs(peer: peerserver, rfc):
             texttype = IPList[0].split('.')[0]
             ip_1 = IPList[1]
             port_1 = IPList[2]
-            #print(texttype)
+            print(texttype)
             for i in rfc:
                 if texttype == i:
-                    print(ip_1)
-                    print(port_1)
+                    #print(ip_1)
+                    #print(port_1)
                     try:
                         s2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                         s2.connect((ip_1,int(port_1)))
                         x = 'Requesting_files'
                         message = json.dumps({"msg" : x ,"file" : i, "Hostname" : hostname , "Portnumber" : str(portnumber)})
-                        #print(message)
+                        print(message)
                         s2.send(message.encode())
-                        reg_rfc_in_csv(i, ip_1, port_1)
+                        flag = '1'
+                        reg_rfc_in_csv(i, ip1, portnumber, flag)
+                        print("Im")
                         recv_rfc_file(i, s2)
                     except Exception:
                         traceback.print_exc(sys.stdout)
@@ -143,10 +190,10 @@ def recv_rfc_file(rfc, s):
             file.write(data)
     file.close()
 
-def reg_rfc_in_csv(rfc, ip: str, port: str):
+def reg_rfc_in_csv(rfc, ip: str, port: str, flag):
     with open(csv_receivedlist, mode='a', newline ='') as myfile:
         wr = csv.writer(myfile, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        wr.writerow([str(rfc) +'.txt;' + ip + ';' + str(port)])
+        wr.writerow([str(rfc) +'.txt;' + ip + ';' + str(port) + ';' + flag])
 
 def leave_message():
     x = 'Leave_the_server'
@@ -180,3 +227,5 @@ while True:
         requesting_peerlist()
     else:
         leave_message()
+        
+        

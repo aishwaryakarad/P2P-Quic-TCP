@@ -5,13 +5,14 @@ from _thread import *
 import threading
 import json
 import csv
+import datetime
 
 file_name = []
 file_list = []
 file_location = "C:\\IP\\RFCS\\"
 file_location.strip()
 file_path = file_location + 'E1TR1_S2_R1_001.fastq'
-filepath1 = "C:\\IP\\ips.csv"
+filepath_loc = "C:\\IP\\ips.csv"
 filepath = "C:\\IP\\ips.csv"
 path = "C:\\IP\\RFCS\\"
   
@@ -29,13 +30,21 @@ class pthread(threading.Thread):
         print("Received connection request from:" + threading.currentThread().getName())
         recmsg = self.csocket.recv(2048).decode('utf-8')
         print("Client's message: ", recmsg)
-        #print(recmsg)
-        if 'GetRFC' in recmsg:
-            data = recmsg[recmsg.index('GetRFC')+7:recmsg.index('P2P-DI')]
-            print(data)
-            data = data.strip()
-            #print(data)
-            file1 = data + '.txt'
+
+        #client_req = Client_Socket.recv(2048).decode()
+        #print(client_req)
+        req = json.loads(recmsg)
+        print(req)
+        Message_type, Hostname, Portnumber = req["msg"], req["Hostname"], req["Portnumber"]
+
+        
+        
+        if Message_type == 'Requesting_files':
+            filename = req["file"]
+            print(filename)
+            filename = filename.strip()
+            print(filename)
+            file1 = filename + '.txt'
             print(file1)
             file_path = file_location + '\\'+ file1
             print(file_path) 
@@ -74,19 +83,34 @@ class pthread(threading.Thread):
                 exit()
                 
 
-        elif 'RFCQuery' in recmsg:
-            global filepath1
+        elif Message_type == 'listofrfcs':
+            global filepath_loc
             # Reading the data from the csv file to determine the RFCs present in the system.
-            list1 = []
+            list_of_files = []
             #filepath1 = "C:\\IP1\\ips.csv"
-            with open(filepath1, 'r') as f:
-                reader = csv.reader(f)
-                for row in reader:
-                    list1.append(row)
-            data = json.dumps(list1)
-            send_response = 'POST 200 OK' + '<cr> <lf>\nFrom:' + socket.gethostname() + '<cr><lf>\nDate:' + str(time.asctime(time.localtime(time.time()))) + '<cr> <lf>\nData-Type: RFClist <cr> <lf>\n<cr> <lf>\n' + data
-            print(send_response)
-            self.csocket.send(send_response.encode())
+            with open(filepath_loc, 'r') as fil:
+                read = csv.reader(fil)
+                for record in read:
+                    list_of_files.append(record)
+            data = json.dumps(list_of_files)
+            response = 'Successful' + '\n' + str(datetime.datetime.now()) + '\n' + data
+            print(response)
+            self.csocket.send(response.encode())
+            print("Data Sent")
+
+            """
+            l_active = Peerlist.send_AP(server_IP)
+            print(l_active)
+            #l_active.append({'Date':str(datetime.datetime.now())})
+            query_data = json.dumps(l_active)
+            print("query data=", query_data)
+
+            # Check if any peer is active or not
+            if len(l_active) > 0:
+                list_active = '200 OK'+'\n' + query_data
+                conn.send(list_active.encode())
+                conn.close()
+            """
 """
 # create  socket object 
 s = socket.socket()          
@@ -128,23 +152,66 @@ while True:
 socket_client.close()
 print("Socket closed")
 """
+
+# Sub routing to get all the RFC files present in the current server.
+def get_all_files(path):
+    #file_list = []
+    global filepath
+    basepath = path
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect(("8.8.8.8", 80))
+    ip = (s.getsockname()[0])
+    print(ip)
+    s.close()
+    port1 = str(port)
+    for entry in os.listdir(basepath):
+        if os.path.isfile(os.path.join(basepath, entry)):
+            #print ("asdfasdf")
+            print(entry)
+            fileName = entry + ';' + ip + ';' + port1 + ';' + '1'
+            file_list.append(fileName)
+    print(file_list)
+    
+    # writing all the files in the csv file
+    #filepath = "C:\\IP1\\ips.csv"
+    print("Storing the RFCs present in the local Server to: ",filepath)
+    with open(filepath,'w', newline ='') as f:
+        writer = csv.writer(f)
+        for words in file_list:
+            writer.writerow([words])
+     
+
+
+def get_all_files_names(path):
+    #file_name = []
+    basepath = path
+    hostname = socket.gethostname()
+    ip = socket.gethostbyname(hostname)
+    port1 = str(port)
+    for entry in os.listdir(basepath):
+        if os.path.isfile(os.path.join(basepath, entry)):
+            print(entry)
+            file_name.append(entry)
+    print(file_name)
+
 Server_Thread = []
+port = 20000
 def main():
     global path
-    s = socket.socket()
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     print("All the files in the present working directory:")
     #path = "C:\\IP1\\RFCS\\"
-    #get_all_files(path)
+    get_all_files(file_location)
     #print("All the files in the present working directory:")
     #path = "C:\\IP1\\RFCS\\"
-    #get_all_files_names(path)
+    get_all_files_names(file_location)
     
     
     #print(file_list) 
     
     Host = ''
     #port = int(global_listening_port)
-    port = 8143
+    
     #Server_Socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.bind((Host,port))
     print ("socket binded to %s " %(port))
@@ -153,6 +220,9 @@ def main():
         s.listen(6)
         print('The Server Socket is listening')
         Client_Socket, Client_IP= s.accept()
+        print("Client_Scoket", Client_Socket)
+        print("IP", Client_IP)
+        
         print("Client_Socket: ",Client_Socket)
         print("Got the connection from Client_Socket: ",Client_IP)
         np=pthread(Client_Socket,Client_IP)
